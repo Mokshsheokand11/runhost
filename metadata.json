@@ -1,0 +1,5 @@
+{
+  "name": "RunHost",
+  "description": "A comprehensive marathon event management platform for hosting, joining, and tracking marathon events.",
+  "requestFramePermissions": []
+}
