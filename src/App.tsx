@@ -20,7 +20,10 @@ import {
   CircleUser,
   LayoutDashboard,
   Menu,
-  X
+  X,
+  Camera,
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useMotionValueEvent } from 'motion/react';
 import { cn, formatDate } from './lib/utils';
@@ -44,6 +47,16 @@ interface Marathon {
   hostName?: string;
   winnerId?: number;
   participants?: User[];
+}
+
+interface Photo {
+  id: number;
+  marathonId: number;
+  userId: number;
+  imageUrl: string;
+  caption: string;
+  userName: string;
+  createdAt: string;
 }
 
 // --- Auth Context ---
@@ -796,12 +809,114 @@ const MarathonList = () => {
   );
 };
 
+const PhotoGallery = ({ photos }: { photos: Photo[] }) => {
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-50 rounded-lg">
+            <Camera className="w-5 h-5 text-purple-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-zinc-900 border-none">Post-Race Gallery</h2>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-zinc-500 font-medium bg-zinc-50 px-3 py-1 rounded-full border border-zinc-100">
+           <Sparkles className="w-4 h-4 text-yellow-500" />
+           {photos.length} Precious Moments
+        </div>
+      </div>
+
+      {photos.length === 0 ? (
+        <div className="py-20 text-center bg-zinc-50 rounded-[2rem] border-2 border-dashed border-zinc-200">
+           <ImageIcon className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
+           <p className="text-zinc-500 font-medium">No moments captured yet. Be the first to share!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {photos.map((photo) => (
+            <motion.div
+              key={photo.id}
+              layoutId={`photo-${photo.id}`}
+              onClick={() => setSelectedPhoto(photo)}
+              className="relative aspect-square rounded-2xl overflow-hidden cursor-zoom-in group shadow-md hover:shadow-xl transition-all"
+              whileHover={{ scale: 0.98 }}
+            >
+              <img 
+                src={photo.imageUrl} 
+                alt={photo.caption} 
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
+                <p className="text-white text-xs font-bold">{photo.userName}</p>
+                {photo.caption && <p className="text-white/80 text-[10px] line-clamp-1">{photo.caption}</p>}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* Lightbox / Reel View */}
+      <AnimatePresence>
+        {selectedPhoto && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/95 backdrop-blur-xl"
+            onClick={() => setSelectedPhoto(null)}
+          >
+            <motion.div 
+              layoutId={`photo-${selectedPhoto.id}`}
+              className="relative max-w-4xl w-full aspect-video rounded-[2.5rem] overflow-hidden bg-zinc-900 shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img src={selectedPhoto.imageUrl} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+              <div className="absolute bottom-0 inset-x-0 p-8 md:p-12 bg-gradient-to-t from-black/80 to-transparent">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center font-bold text-white border border-white/20">
+                    {selectedPhoto.userName[0]}
+                  </div>
+                  <div>
+                    <p className="font-bold text-white text-lg">{selectedPhoto.userName}</p>
+                    <p className="text-white/60 text-sm">{formatDate(selectedPhoto.createdAt)}</p>
+                  </div>
+                </div>
+                {selectedPhoto.caption && (
+                  <p className="text-white text-xl md:text-2xl font-medium leading-relaxed italic">
+                    "{selectedPhoto.caption}"
+                  </p>
+                )}
+              </div>
+              <button 
+                onClick={() => setSelectedPhoto(null)}
+                className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-colors border border-white/10"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const MarathonDetails = () => {
   const { id } = useParams<{ id: string }>();
   const [marathon, setMarathon] = useState<Marathon | null>(null);
   const { user } = useAuth();
   const [joined, setJoined] = useState(false);
   const navigate = useNavigate();
+
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const fetchPhotos = () => {
+    api.get(`/marathons/${id}/photos`).then(res => setPhotos(res.data));
+  };
 
   useEffect(() => {
     api.get(`/marathons/${id}`).then(res => {
@@ -810,6 +925,7 @@ const MarathonDetails = () => {
         setJoined(true);
       }
     });
+    fetchPhotos();
   }, [id, user]);
 
   const handleJoin = async () => {
@@ -832,6 +948,34 @@ const MarathonDetails = () => {
       setMarathon(res.data);
     } catch (err) {
       alert('Failed to declare winner');
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const caption = prompt("Add a caption to this memory:");
+    if (caption === null) return;
+
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('caption', caption);
+
+    setUploading(true);
+    try {
+      await api.post(`/marathons/${id}/photos`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      fetchPhotos();
+    } catch (err) {
+      alert('Upload failed. Only participants can share moments!');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -880,6 +1024,10 @@ const MarathonDetails = () => {
             <section>
               <h2 className="text-2xl font-bold text-zinc-900 mb-4">About the Event</h2>
               <p className="text-zinc-600 leading-relaxed text-lg whitespace-pre-wrap">{marathon.description}</p>
+            </section>
+
+            <section className="pt-10 border-t border-zinc-100">
+               <PhotoGallery photos={photos} />
             </section>
 
             <section>
@@ -942,6 +1090,30 @@ const MarathonDetails = () => {
                 </button>
               )}
             </div>
+
+            {(joined || isHost) && (
+              <div className="p-6 bg-purple-50 rounded-2xl border border-purple-100 flex flex-col items-center text-center">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm">
+                  <Camera className="w-6 h-6 text-purple-600" />
+                </div>
+                <h3 className="font-bold text-purple-900 mb-2">Relive Momentum</h3>
+                <p className="text-sm text-purple-700 mb-6">Capture and share your journey with the community.</p>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleFileChange}
+                />
+                <button 
+                  onClick={handleUploadClick}
+                  disabled={uploading}
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 disabled:opacity-50"
+                >
+                  {uploading ? 'Uploading...' : 'Share Memory'}
+                </button>
+              </div>
+            )}
 
             <div className="p-6 border border-zinc-200 rounded-2xl">
               <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider mb-4">Hosted By</p>

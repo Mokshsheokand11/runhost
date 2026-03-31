@@ -5,12 +5,29 @@ import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database('marathon.db');
 const JWT_SECRET = process.env.JWT_SECRET || 'marathon-connect-secret-key-2026';
 
 // Initialize Database
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage });
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,11 +57,23 @@ db.exec(`
     FOREIGN KEY (marathonId) REFERENCES marathons(id),
     FOREIGN KEY (userId) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    marathonId INTEGER NOT NULL,
+    userId INTEGER NOT NULL,
+    imageUrl TEXT NOT NULL,
+    caption TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (marathonId) REFERENCES marathons(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
 `);
 
 async function startServer() {
   const app = express();
   app.use(express.json());
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // --- Auth Middleware ---
   const authenticateToken = (req: any, res: any, next: any) => {
@@ -167,6 +196,37 @@ async function startServer() {
       LIMIT 10
     `).all();
     res.json(leaderboard);
+  });
+
+  // --- Photo Gallery Routes ---
+  app.get('/api/marathons/:id/photos', (req, res) => {
+    const photos = db.prepare(`
+      SELECT p.*, u.name as userName 
+      FROM photos p 
+      JOIN users u ON p.userId = u.id 
+      WHERE p.marathonId = ?
+      ORDER BY p.createdAt DESC
+    `).all(req.params.id);
+    res.json(photos);
+  });
+
+  app.post('/api/marathons/:id/photos', authenticateToken, upload.single('photo'), (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    // Check if user is participant or host
+    const marathon: any = db.prepare('SELECT hostedBy FROM marathons WHERE id = ?').get(req.params.id);
+    const participant = db.prepare('SELECT 1 FROM participants WHERE marathonId = ? AND userId = ?').get(req.params.id, req.user.id);
+    
+    if (marathon.hostedBy !== req.user.id && !participant) {
+      return res.status(403).json({ error: 'Only participants can upload photos' });
+    }
+
+    const { caption } = req.body;
+    const imageUrl = `/uploads/${req.file.filename}`;
+    const stmt = db.prepare('INSERT INTO photos (marathonId, userId, imageUrl, caption) VALUES (?, ?, ?, ?)');
+    const result = stmt.run(req.params.id, req.user.id, imageUrl, caption || '');
+    
+    res.status(201).json({ id: result.lastInsertRowid, imageUrl });
   });
 
   // --- Vite Integration ---
