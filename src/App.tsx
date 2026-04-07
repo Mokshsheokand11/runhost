@@ -23,7 +23,9 @@ import {
   X,
   Camera,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Heart,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useMotionValueEvent } from 'motion/react';
 import { cn, formatDate } from './lib/utils';
@@ -57,6 +59,9 @@ interface Photo {
   caption: string;
   userName: string;
   createdAt: string;
+  likeCount: number;
+  isLiked: boolean;
+  commentCount: number;
 }
 
 // --- Auth Context ---

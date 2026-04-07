@@ -68,6 +68,24 @@ db.exec(`
     FOREIGN KEY (marathonId) REFERENCES marathons(id),
     FOREIGN KEY (userId) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS photo_likes (
+    photoId INTEGER NOT NULL,
+    userId INTEGER NOT NULL,
+    PRIMARY KEY (photoId, userId),
+    FOREIGN KEY (photoId) REFERENCES photos(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS photo_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    photoId INTEGER NOT NULL,
+    userId INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (photoId) REFERENCES photos(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
 `);
 
 async function startServer() {
@@ -199,15 +217,62 @@ async function startServer() {
   });
 
   // --- Photo Gallery Routes ---
-  app.get('/api/marathons/:id/photos', (req, res) => {
+  app.get('/api/marathons/:id/photos', (req: any, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    let userId = null;
+    if (token) {
+      try {
+        const decoded: any = jwt.verify(token, JWT_SECRET);
+        userId = (decoded as any).id;
+      } catch (e) {}
+    }
+
     const photos = db.prepare(`
-      SELECT p.*, u.name as userName 
+      SELECT p.*, u.name as userName,
+      (SELECT COUNT(*) FROM photo_likes WHERE photoId = p.id) as likeCount,
+      (SELECT COUNT(*) FROM photo_comments WHERE photoId = p.id) as commentCount,
+      (SELECT COUNT(*) FROM photo_likes WHERE photoId = p.id AND userId = ?) as isLiked
       FROM photos p 
       JOIN users u ON p.userId = u.id 
       WHERE p.marathonId = ?
       ORDER BY p.createdAt DESC
-    `).all(req.params.id);
+    `).all(userId, req.params.id);
     res.json(photos);
+  });
+
+  app.post('/api/photos/:id/like', authenticateToken, (req: any, res) => {
+    const photoId = req.params.id;
+    const userId = req.user.id;
+    
+    const existing = db.prepare('SELECT 1 FROM photo_likes WHERE photoId = ? AND userId = ?').get(photoId, userId);
+    if (existing) {
+      db.prepare('DELETE FROM photo_likes WHERE photoId = ? AND userId = ?').run(photoId, userId);
+      res.json({ liked: false });
+    } else {
+      db.prepare('INSERT INTO photo_likes (photoId, userId) VALUES (?, ?)').run(photoId, userId);
+      res.json({ liked: true });
+    }
+  });
+
+  app.get('/api/photos/:id/comments', (req, res) => {
+    const comments = db.prepare(`
+      SELECT c.*, u.name as userName 
+      FROM photo_comments c 
+      JOIN users u ON c.userId = u.id 
+      WHERE c.photoId = ? 
+      ORDER BY c.createdAt ASC
+    `).all(req.params.id);
+    res.json(comments);
+  });
+
+  app.post('/api/photos/:id/comments', authenticateToken, (req: any, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Comment text is required' });
+    
+    const stmt = db.prepare('INSERT INTO photo_comments (photoId, userId, text) VALUES (?, ?, ?)');
+    const result = stmt.run(req.params.id, req.user.id, text);
+    res.status(201).json({ id: result.lastInsertRowid });
   });
 
   app.post('/api/marathons/:id/photos', authenticateToken, upload.single('photo'), (req: any, res) => {
