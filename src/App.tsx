@@ -64,6 +64,15 @@ interface Photo {
   commentCount: number;
 }
 
+interface PhotoComment {
+  id: number;
+  photoId: number;
+  userId: number;
+  userName: string;
+  text: string;
+  createdAt: string;
+}
+
 // --- Auth Context ---
 const AuthContext = createContext<{
   user: User | null;
@@ -814,8 +823,102 @@ const MarathonList = () => {
   );
 };
 
-const PhotoGallery = ({ photos }: { photos: Photo[] }) => {
+const CommentSection = ({ photoId, onCommentAdded }: { photoId: number; onCommentAdded: () => void }) => {
+  const [comments, setComments] = useState<PhotoComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const fetchComments = async () => {
+    try {
+      const res = await api.get(`/photos/${photoId}/comments`);
+      setComments(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchComments();
+  }, [photoId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    try {
+      await api.post(`/photos/${photoId}/comments`, { text: newComment });
+      setNewComment("");
+      fetchComments();
+      onCommentAdded();
+    } catch (e) {
+      alert("Only registered users can comment.");
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-zinc-950 border-l border-white/10 w-full md:w-80">
+      <div className="p-6 border-b border-white/10">
+        <h3 className="text-white font-bold flex items-center gap-2">
+          <MessageCircle className="w-4 h-4 text-emerald-500" />
+          Comments
+        </h3>
+      </div>
+      
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {loading ? (
+          <div className="text-zinc-500 text-sm">Loading comments...</div>
+        ) : comments.length === 0 ? (
+          <div className="text-zinc-500 text-sm italic">No comments yet.</div>
+        ) : (
+          comments.map(c => (
+            <div key={c.id} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-500 text-[10px] font-black uppercase tracking-wider">{c.userName}</span>
+                <span className="text-zinc-600 text-[8px]">{formatDate(c.createdAt)}</span>
+              </div>
+              <p className="text-white text-sm leading-relaxed">{c.text}</p>
+            </div>
+          ))
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-4 bg-zinc-900 border-t border-white/10">
+        <div className="flex gap-2">
+          <input 
+            type="text" 
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Add a comment..."
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+          />
+          <button type="submit" className="bg-emerald-600 text-white p-2 rounded-lg hover:bg-emerald-700">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const PhotoGallery = ({ photos, onRefresh }: { photos: Photo[]; onRefresh: () => void }) => {
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const { user } = useAuth();
+
+  const handleLike = async (e: React.MouseEvent, photoId: number) => {
+    e.stopPropagation();
+    if (!user) return alert("Please login to like photos.");
+    try {
+      await api.post(`/photos/${photoId}/like`);
+      onRefresh();
+      // If selectedPhoto is open, we need to update it
+      if (selectedPhoto && selectedPhoto.id === photoId) {
+        setSelectedPhoto(prev => prev ? { ...prev, isLiked: !prev.isLiked, likeCount: prev.isLiked ? prev.likeCount - 1 : prev.likeCount + 1 } : null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -838,24 +941,36 @@ const PhotoGallery = ({ photos }: { photos: Photo[] }) => {
            <p className="text-zinc-500 font-medium">No moments captured yet. Be the first to share!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
           {photos.map((photo) => (
             <motion.div
               key={photo.id}
               layoutId={`photo-${photo.id}`}
               onClick={() => setSelectedPhoto(photo)}
-              className="relative aspect-square rounded-2xl overflow-hidden cursor-zoom-in group shadow-md hover:shadow-xl transition-all"
-              whileHover={{ scale: 0.98 }}
+              className="relative aspect-square rounded-3xl overflow-hidden cursor-zoom-in group shadow-sm hover:shadow-xl transition-all bg-zinc-100"
+              whileHover={{ y: -4 }}
             >
               <img 
                 src={photo.imageUrl} 
                 alt={photo.caption} 
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" 
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                <p className="text-white text-xs font-bold">{photo.userName}</p>
-                {photo.caption && <p className="text-white/80 text-[10px] line-clamp-1">{photo.caption}</p>}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 p-6 flex flex-col justify-end">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-white text-sm font-bold truncate pr-4">{photo.userName}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 text-white text-xs font-bold">
+                       <Heart className={cn("w-4 h-4", photo.isLiked ? "fill-red-500 text-red-500" : "text-white")} />
+                       {photo.likeCount}
+                    </div>
+                    <div className="flex items-center gap-1 text-white text-xs font-bold">
+                       <MessageCircle className="w-4 h-4" />
+                       {photo.commentCount}
+                    </div>
+                  </div>
+                </div>
+                {photo.caption && <p className="text-white/70 text-xs line-clamp-2 italic leading-relaxed">"{photo.caption}"</p>}
               </div>
             </motion.div>
           ))}
@@ -869,37 +984,71 @@ const PhotoGallery = ({ photos }: { photos: Photo[] }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/95 backdrop-blur-xl"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-zinc-950/98 backdrop-blur-2xl"
             onClick={() => setSelectedPhoto(null)}
           >
             <motion.div 
               layoutId={`photo-${selectedPhoto.id}`}
-              className="relative max-w-4xl w-full aspect-video rounded-[2.5rem] overflow-hidden bg-zinc-900 shadow-2xl border border-white/10"
+              className="relative max-w-6xl w-full h-full max-h-[800px] flex flex-col md:flex-row rounded-[2.5rem] overflow-hidden bg-zinc-900 shadow-2xl border border-white/10"
               onClick={(e) => e.stopPropagation()}
             >
-              <img src={selectedPhoto.imageUrl} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-              <div className="absolute bottom-0 inset-x-0 p-8 md:p-12 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="flex items-center gap-4 mb-3">
-                  <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center font-bold text-white border border-white/20">
-                    {selectedPhoto.userName[0]}
+              {/* Photo Area */}
+              <div className="flex-1 relative group bg-black flex items-center justify-center overflow-hidden">
+                <img src={selectedPhoto.imageUrl} alt="" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                
+                {/* Meta Overlay */}
+                <div className="absolute inset-x-0 bottom-0 p-8 md:p-12 bg-gradient-to-t from-black/90 via-black/40 to-transparent">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center font-bold text-white border border-white/20 text-lg shadow-lg">
+                        {selectedPhoto.userName[0]}
+                      </div>
+                      <div>
+                        <p className="font-bold text-white text-xl tracking-tight">{selectedPhoto.userName}</p>
+                        <p className="text-white/50 text-sm">{formatDate(selectedPhoto.createdAt)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <button 
+                          onClick={(e) => handleLike(e, selectedPhoto.id)}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all backdrop-blur-md border",
+                            selectedPhoto.isLiked 
+                             ? "bg-red-500/20 text-red-500 border-red-500/50" 
+                             : "bg-white/10 text-white border-white/10 hover:bg-white/20"
+                          )}
+                        >
+                          <Heart className={cn("w-5 h-5", selectedPhoto.isLiked && "fill-current")} />
+                          {selectedPhoto.likeCount}
+                        </button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-bold text-white text-lg">{selectedPhoto.userName}</p>
-                    <p className="text-white/60 text-sm">{formatDate(selectedPhoto.createdAt)}</p>
-                  </div>
+                  
+                  {selectedPhoto.caption && (
+                    <p className="text-white/90 text-2xl md:text-3xl font-medium mt-8 leading-relaxed max-w-2xl italic tracking-tight">
+                      "{selectedPhoto.caption}"
+                    </p>
+                  )}
                 </div>
-                {selectedPhoto.caption && (
-                  <p className="text-white text-xl md:text-2xl font-medium leading-relaxed italic">
-                    "{selectedPhoto.caption}"
-                  </p>
-                )}
+
+                <button 
+                  onClick={() => setSelectedPhoto(null)}
+                  className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-colors border border-white/10 hover:scale-110 active:scale-95"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <button 
-                onClick={() => setSelectedPhoto(null)}
-                className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-colors border border-white/10"
-              >
-                <X className="w-6 h-6" />
-              </button>
+
+              {/* Comments Area (Desktop Sidebar) */}
+              <CommentSection 
+                photoId={selectedPhoto.id} 
+                onCommentAdded={() => {
+                  onRefresh();
+                  // Update current selected photo's comment count
+                  setSelectedPhoto(prev => prev ? { ...prev, commentCount: prev.commentCount + 1 } : null);
+                }} 
+              />
             </motion.div>
           </motion.div>
         )}
@@ -1032,7 +1181,7 @@ const MarathonDetails = () => {
             </section>
 
             <section className="pt-10 border-t border-zinc-100">
-               <PhotoGallery photos={photos} />
+               <PhotoGallery photos={photos} onRefresh={fetchPhotos} />
             </section>
 
             <section>
