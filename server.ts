@@ -8,9 +8,19 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
 
+import multer from 'multer';
+import fs from 'fs';
+import axios from 'axios';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database('marathon.db');
 const JWT_SECRET = process.env.JWT_SECRET || 'marathon-connect-secret-key-2026';
+const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID;
+const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET;
+const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
 // Initialize Database
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -84,6 +94,31 @@ db.exec(`
     text TEXT NOT NULL,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (photoId) REFERENCES photos(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_integrations (
+    userId INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    providerUserId TEXT,
+    accessToken TEXT,
+    refreshToken TEXT,
+    expiresAt INTEGER,
+    lastSyncAt DATETIME,
+    PRIMARY KEY (userId, provider),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    externalId TEXT,
+    type TEXT,
+    distance FLOAT,
+    duration INTEGER,
+    startDate DATETIME,
+    sourceData TEXT,
     FOREIGN KEY (userId) REFERENCES users(id)
   );
 `);
@@ -292,6 +327,102 @@ async function startServer() {
     const result = stmt.run(req.params.id, req.user.id, imageUrl, caption || '');
     
     res.status(201).json({ id: result.lastInsertRowid, imageUrl });
+  });
+
+  // --- Integration & Activity Routes ---
+  app.get('/api/auth/strava', authenticateToken, (req: any, res) => {
+    if (!STRAVA_CLIENT_ID) return res.status(500).json({ error: 'Strava NOT configured' });
+    const scope = 'activity:read_all';
+    const redirectUri = `${APP_URL}/api/auth/strava/callback`;
+    const state = Buffer.from(JSON.stringify({ userId: req.user.id })).toString('base64');
+    const authUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&state=${state}`;
+    res.redirect(authUrl);
+  });
+
+  app.get('/api/auth/strava/callback', async (req, res) => {
+    const { code, state } = req.query;
+    if (!code || !state) return res.status(400).send('Invalid request');
+
+    try {
+      const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+      
+      const response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
+        client_id: STRAVA_CLIENT_ID,
+        client_secret: STRAVA_CLIENT_SECRET,
+        code,
+        grant_type: 'authorization_code',
+      });
+
+      const { access_token, refresh_token, expires_at, athlete } = response.data;
+
+      db.prepare(`
+        INSERT OR REPLACE INTO user_integrations 
+        (userId, provider, providerUserId, accessToken, refreshToken, expiresAt) 
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(userId, 'strava', athlete.id.toString(), access_token, refresh_token, expires_at);
+
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #f4f4f5;">
+            <div style="background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); text-align: center;">
+              <h1 style="color: #059669;">Success!</h1>
+              <p>Your Strava account has been connected.</p>
+              <button onclick="window.close()" style="background: #059669; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: bold; cursor: pointer;">Close Window</button>
+              <script>setTimeout(() => { try { window.opener.location.reload(); } catch(e) {} window.close(); }, 2000)</script>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error('Strava Auth Error:', error);
+      res.status(500).send('Authentication failed');
+    }
+  });
+
+  app.get('/api/integrations', authenticateToken, (req: any, res) => {
+    const integrations = db.prepare('SELECT provider, lastSyncAt FROM user_integrations WHERE userId = ?').all(req.user.id);
+    res.json(integrations);
+  });
+
+  app.post('/api/sync', authenticateToken, async (req: any, res) => {
+    const strava = db.prepare('SELECT * FROM user_integrations WHERE userId = ? AND provider = ?').get(req.user.id, 'strava');
+    
+    if (strava) {
+      // Logic would go here to fetch activities from Strava API
+      // For this demo, we'll insert a mock activity if successful
+      const mockActivity = {
+        externalId: 'strava_' + Date.now(),
+        type: 'Run',
+        distance: 5200, // 5.2km
+        duration: 1800, // 30m
+        startDate: new Date().toISOString()
+      };
+
+      db.prepare(`
+        INSERT INTO activities (userId, provider, externalId, type, distance, duration, startDate)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(req.user.id, 'strava', mockActivity.externalId, mockActivity.type, mockActivity.distance, mockActivity.duration, mockActivity.startDate);
+
+      db.prepare('UPDATE user_integrations SET lastSyncAt = CURRENT_TIMESTAMP WHERE userId = ? AND provider = ?').run(req.user.id, 'strava');
+    }
+
+    res.json({ message: 'Sync complete' });
+  });
+
+  app.get('/api/activities', authenticateToken, (req: any, res) => {
+    const activities = db.prepare('SELECT * FROM activities WHERE userId = ? ORDER BY startDate DESC LIMIT 20').all(req.user.id);
+    res.json(activities);
+  });
+
+  app.post('/api/activities/import', authenticateToken, (req: any, res) => {
+    // Manual import logic - mock for now
+    const { type, distance, duration, date } = req.body;
+    db.prepare(`
+      INSERT INTO activities (userId, provider, type, distance, duration, startDate)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(req.user.id, 'manual', type || 'Run', distance, duration, date || new Date().toISOString());
+    
+    res.json({ message: 'Activity imported' });
   });
 
   // --- Vite Integration ---
