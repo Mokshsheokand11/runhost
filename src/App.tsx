@@ -25,10 +25,15 @@ import {
   Image as ImageIcon,
   Sparkles,
   Heart,
-  MessageCircle
+  MessageCircle,
+  Zap,
+  RefreshCw,
+  Link as LinkIcon,
+  Activity as ActivityIcon
 } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useTransform, useVelocity, useSpring, useMotionValueEvent } from 'motion/react';
 import { cn, formatDate } from './lib/utils';
+import IntegrationsPage from './IntegrationsPage';
 
 // --- Types ---
 interface User {
@@ -1372,10 +1377,12 @@ const CreateMarathon = () => {
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState<any>(null);
+  const [activities, setActivities] = useState<any[]>([]);
   const { user } = useAuth();
 
   useEffect(() => {
     api.get('/users/profile').then(res => setProfile(res.data));
+    api.get('/activities').then(res => setActivities(res.data));
   }, []);
 
   if (!profile) return <div className="p-12 text-center">Loading...</div>;
@@ -1403,6 +1410,13 @@ const ProfilePage = () => {
                 <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-bold">{profile.won.length}</span>
               </div>
             </div>
+            
+            <Link 
+              to="/profile/integrations" 
+              className="mt-6 flex items-center justify-center gap-2 w-full py-3 bg-zinc-900 text-white rounded-xl font-bold hover:bg-zinc-800 transition-all text-sm"
+            >
+              <Zap className="w-4 h-4 text-emerald-400" /> Manage Apps
+            </Link>
           </div>
         </div>
 
@@ -1453,6 +1467,43 @@ const ProfilePage = () => {
                 </div>
               ))}
               {profile.won.length === 0 && <p className="text-zinc-400 col-span-2 py-8 text-center bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">No wins yet. Keep running!</p>}
+            </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <ActivityIcon className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-2xl font-bold text-zinc-900">Recent Activity</h3>
+              </div>
+              <Link to="/profile/integrations" className="text-sm font-bold text-emerald-600 hover:text-emerald-700">View All</Link>
+            </div>
+            <div className="space-y-4">
+              {activities.slice(0, 5).map((act: any) => (
+                <div key={act.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-zinc-100 shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-zinc-50 rounded-xl flex items-center justify-center">
+                      {act.provider === 'strava' ? <Zap className="w-5 h-5 text-[#FC4C02]" /> : <ActivityIcon className="w-5 h-5 text-zinc-400" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-zinc-900">{act.type}</p>
+                      <p className="text-xs text-zinc-500">{formatDate(act.startDate)} via {act.provider}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-zinc-900">{(act.distance / 1000).toFixed(2)} km</p>
+                    <p className="text-xs text-zinc-400">{Math.floor(act.duration / 60)}m {act.duration % 60}s</p>
+                  </div>
+                </div>
+              ))}
+              {activities.length === 0 && (
+                <div className="p-8 text-center bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
+                  <p className="text-zinc-400 mb-4">Connect Strava or Garmin to see your activity history.</p>
+                  <Link to="/profile/integrations" className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition-all text-sm">
+                    Connect Apps
+                  </Link>
+                </div>
+              )}
             </div>
           </section>
         </div>
@@ -1675,6 +1726,7 @@ export default function App() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/create" element={<ProtectedRoute><CreateMarathon /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+              <Route path="/profile/integrations" element={<ProtectedRoute><IntegrationsPage /></ProtectedRoute>} />
             </Routes>
           </main>
           <footer className="bg-zinc-50 border-t border-zinc-100 py-12 mt-24">

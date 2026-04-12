@@ -7,9 +7,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
-
-import multer from 'multer';
-import fs from 'fs';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
