@@ -1637,7 +1637,7 @@ const Leaderboard = () => {
   useEffect(() => {
     api.get('/leaderboard').then(res => {
       const realData = res.data;
-      // Add fake participants to reach 11 if needed
+      // Add fake participants to reach more entries if needed
       const fakeParticipants = [
         { id: -1, name: "Alex Rivera", instaId: "@arivera_runs", wins: 15 },
         { id: -2, name: "Sarah Chen", instaId: "@sarah_sprints", wins: 12 },
@@ -1649,13 +1649,22 @@ const Leaderboard = () => {
         { id: -8, name: "Chloe Smith", instaId: "@chloe_active", wins: 5 },
         { id: -9, name: "Tom Baker", instaId: "@tom_trails", wins: 4 },
         { id: -10, name: "Lisa Wong", instaId: "@lisa_wong_run", wins: 3 },
-        { id: -11, name: "Kevin Hart", instaId: "@kevin_marathon", wins: 2 },
+        { id: -11, name: "Kevin Hart", instaId: "@kevin_marathon", wins: 18 },
+        { id: -12, name: "James Wilson", instaId: "@j_wilson", wins: 14 },
+        { id: -13, name: "Emma Watson", instaId: "@emma_runs", wins: 17 },
+        { id: -14, name: "Michael Brown", instaId: "@mike_b", wins: 11 },
+        { id: -15, name: "Sophie Taylor", instaId: "@sophie_t", wins: 13 },
+        { id: -16, name: "Liam Johnson", instaId: "@liam_j", wins: 16 },
+        { id: -17, name: "Olivia Davis", instaId: "@olivia_d", wins: 20 },
+        { id: -18, name: "Noah Garcia", instaId: "@noah_g", wins: 22 },
+        { id: -19, name: "Ava Martinez", instaId: "@ava_m", wins: 21 },
+        { id: -20, name: "Lucas Lee", instaId: "@lucas_l", wins: 19 },
       ];
       
       // Merge and sort
       const combined = [...realData, ...fakeParticipants]
         .sort((a, b) => b.wins - a.wins)
-        .slice(0, 11);
+        .slice(0, 20);
         
       setData(combined);
     });
