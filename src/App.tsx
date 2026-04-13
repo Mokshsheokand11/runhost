@@ -471,6 +471,102 @@ const CommunitySection = () => {
         { id: 2, sender: "Chris", text: "Ready. Coffee is prepped.", time: "9:05 PM" },
         { id: 3, sender: "Boss", text: "That's what I like to hear. See you in the dark.", time: "9:10 PM" }
       ]
+    },
+    {
+      id: 9,
+      name: "Neon Knights",
+      members: 1100,
+      description: "Illuminating the streets with glow sticks and high-vis gear. Safety first, speed second.",
+      image: "https://picsum.photos/seed/neon/400/300",
+      category: "Night Running",
+      messages: [
+        { id: 1, sender: "Borg", text: "Ready to glow tonight?", time: "7:00 PM" },
+        { id: 2, sender: "Jules", text: "Got my lights charged up!", time: "7:15 PM" }
+      ]
+    },
+    {
+      id: 10,
+      name: "Peak Performers",
+      members: 540,
+      description: "Serious vertical gain for those who love a challenge. Mountain trails only.",
+      image: "https://picsum.photos/seed/peak/400/300",
+      category: "Trail",
+      messages: [
+        { id: 1, sender: "Sky", text: "Who's hitting the ridge tomorrow?", time: "5:00 PM" },
+        { id: 2, sender: "Rocky", text: "Count me in for the 2000ft climb.", time: "5:30 PM" }
+      ]
+    },
+    {
+      id: 11,
+      name: "Track Titans",
+      members: 300,
+      description: "Precision interval training on the oval. Hit your splits, find your limits.",
+      image: "https://picsum.photos/seed/track/400/300",
+      category: "Track",
+      messages: [
+        { id: 1, sender: "Ace", text: "What's the interval set today?", time: "3:00 PM" },
+        { id: 2, sender: "Coach", text: "12x400m at goal pace. Rest 60s.", time: "3:05 PM" }
+      ]
+    },
+    {
+      id: 12,
+      name: "Brunch Runners",
+      members: 2800,
+      description: "We run so we can eat. 5k social run followed by the best pancakes in town.",
+      image: "https://picsum.photos/seed/brunch/400/300",
+      category: "Social",
+      messages: [
+        { id: 1, sender: "Honey", text: "Maple syrup is waiting!", time: "Sunday" },
+        { id: 2, sender: "Crispy", text: "Can we try the new place on 3rd?", time: "Sunday" }
+      ]
+    },
+    {
+      id: 13,
+      name: "River Rapids",
+      members: 1450,
+      description: "Fast-paced runs along the winding river paths. Catch the breeze.",
+      image: "https://picsum.photos/seed/river/400/300",
+      category: "Scenic",
+      messages: [
+        { id: 1, sender: "Flow", text: "Mist is beautiful on the water today.", time: "6:00 AM" },
+        { id: 2, sender: "Reed", text: "Saw a heron at mile 4!", time: "7:00 AM" }
+      ]
+    },
+    {
+      id: 14,
+      name: "Grit & Glory",
+      members: 720,
+      description: "Mental toughness training for ultra-marathoners. Long miles, no complaints.",
+      image: "https://picsum.photos/seed/grit/400/300",
+      category: "Endurance",
+      messages: [
+        { id: 1, sender: "Iron", text: "50-miler next weekend. Who's pacing?", time: "Monday" },
+        { id: 2, sender: "Will", text: "I'll do the last 15 with you.", time: "Tuesday" }
+      ]
+    },
+    {
+      id: 15,
+      name: "Alley Cats",
+      members: 980,
+      description: "Navigation-based runs through the city's hidden shortcuts and urban jungles.",
+      image: "https://picsum.photos/seed/alley/400/300",
+      category: "Adventure",
+      messages: [
+        { id: 1, sender: "Dash", text: "Tunnel route is open again.", time: "4:00 PM" },
+        { id: 2, sender: "Sneak", text: "Meet at the garage entrance.", time: "4:15 PM" }
+      ]
+    },
+    {
+      id: 16,
+      name: "First Light Flyers",
+      members: 1900,
+      description: "Catch the very first rays of sun on the move. The city is yours.",
+      image: "https://picsum.photos/seed/sunrise/400/300",
+      category: "Early Bird",
+      messages: [
+        { id: 1, sender: "Ray", text: "Pink sky this morning!", time: "5:45 AM" },
+        { id: 2, sender: "Dawn", text: "Perfect start to the week.", time: "6:00 AM" }
+      ]
     }
   ];
 
