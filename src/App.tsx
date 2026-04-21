@@ -1786,6 +1786,7 @@ export default function App() {
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/communities/create" element={<ProtectedRoute><CreateCommunity /></ProtectedRoute>} />
               <Route path="/create" element={<ProtectedRoute><CreateMarathon /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="/profile/integrations" element={<ProtectedRoute><IntegrationsPage /></ProtectedRoute>} />
