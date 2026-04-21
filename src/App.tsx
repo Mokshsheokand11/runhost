@@ -1242,6 +1242,110 @@ const MarathonDetails = () => {
   );
 };
 
+const CreateCommunity = () => {
+  const [formData, setFormData] = useState({ name: '', description: '', category: 'Social' });
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { data } = await api.post('/communities', formData);
+      navigate('/#communities'); // Go back to community section
+      // Since it's a hash, we might need to manually scroll or just navigate to /
+      navigate('/');
+      setTimeout(() => {
+        document.getElementById('communities')?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to create tribe');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-12">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white p-8 md:p-12 rounded-[2.5rem] shadow-2xl border border-zinc-100"
+      >
+        <div className="mb-10 text-center">
+          <div className="inline-block p-4 bg-emerald-50 rounded-3xl mb-6">
+            <Users className="w-10 h-10 text-emerald-600" />
+          </div>
+          <h2 className="text-4xl font-black text-zinc-900 tracking-tight">Launch Your Tribe</h2>
+          <p className="text-zinc-500 mt-2 text-lg">Gather athletes, share moments, and grow together.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-bold text-zinc-700 mb-2">Tribe Name</label>
+              <input 
+                type="text" required
+                className="w-full px-5 py-4 rounded-2xl border border-zinc-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-lg"
+                placeholder="e.g. Gotham City Runners"
+                onChange={e => setFormData({...formData, name: e.target.value})}
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-zinc-700 mb-2">Category</label>
+                <select 
+                  className="w-full px-5 py-4 rounded-2xl border border-zinc-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all bg-white"
+                  onChange={e => setFormData({...formData, category: e.target.value})}
+                >
+                  <option value="Social">Social</option>
+                  <option value="Night Running">Night Running</option>
+                  <option value="Trail">Trail</option>
+                  <option value="Track">Track</option>
+                  <option value="Endurance">Endurance</option>
+                  <option value="Scenic">Scenic</option>
+                  <option value="Adventure">Adventure</option>
+                  <option value="Early Bird">Early Bird</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-zinc-700 mb-2">Visibility</label>
+                <div className="px-5 py-4 rounded-2xl bg-zinc-50 border border-zinc-100 text-zinc-500 font-medium">
+                  Public Tribe
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-zinc-700 mb-2">Description</label>
+              <textarea 
+                required rows={4}
+                className="w-full px-5 py-4 rounded-2xl border border-zinc-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all resize-none text-lg"
+                placeholder="What is your tribe about? When do you run?"
+                onChange={e => setFormData({...formData, description: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full py-5 bg-zinc-900 text-white rounded-2xl font-black text-xl hover:bg-emerald-600 transition-all shadow-xl shadow-zinc-200 disabled:opacity-50 flex items-center justify-center gap-3 group"
+          >
+            {loading ? 'Creating...' : (
+              <>
+                Create Tribe
+                <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
 const CreateMarathon = () => {
   const [formData, setFormData] = useState({ title: '', description: '', date: '', location: '', prize: '' });
   const navigate = useNavigate();
