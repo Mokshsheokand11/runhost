@@ -118,7 +118,63 @@ db.exec(`
     sourceData TEXT,
     FOREIGN KEY (userId) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS communities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    image TEXT,
+    category TEXT,
+    ownerId INTEGER,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ownerId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS community_members (
+    communityId INTEGER NOT NULL,
+    userId INTEGER NOT NULL,
+    joinedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (communityId, userId),
+    FOREIGN KEY (communityId) REFERENCES communities(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS community_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    communityId INTEGER NOT NULL,
+    userId INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (communityId) REFERENCES communities(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
 `);
+
+// Seed communities if empty
+const communityCount = db.prepare('SELECT COUNT(*) as count FROM communities').get() as { count: number };
+if (communityCount.count === 0) {
+  const initialCommunities = [
+    { name: "Midnight Striders", description: "For those who find their pace under the city lights. Night runs every Tuesday.", image: "https://picsum.photos/seed/nightrun/400/300", category: "Night Running" },
+    { name: "Mountain Goats", description: "Trail running enthusiasts conquering the steepest peaks. Weekend excursions.", image: "https://picsum.photos/seed/trail/400/300", category: "Trail" },
+    { name: "Elite Sprinters", description: "Focusing on speed, form, and explosive power. Track sessions daily.", image: "https://picsum.photos/seed/sprint/400/300", category: "Track" },
+    { name: "Morning Glory Club", description: "Start your day with a 5K and a coffee. Sunrise runs at the park.", image: "https://picsum.photos/seed/morning/400/300", category: "Social" },
+    { name: "Coastal Cruisers", description: "Breezy ocean-side runs for all levels. Perfect for recovery days.", image: "https://picsum.photos/seed/beach/400/300", category: "Scenic" },
+    { name: "Iron Lungs", description: "High-altitude training for serious endurance athletes. Oxygen is optional.", image: "https://picsum.photos/seed/mountain/400/300", category: "Endurance" },
+    { name: "Urban Explorers", description: "Discover hidden gems in the city through running. Every run is a new route.", image: "https://picsum.photos/seed/city/400/300", category: "Adventure" },
+    { name: "The 5AM Crew", description: "The earliest birds in the city. Beat the traffic and the sun.", image: "https://picsum.photos/seed/early/400/300", category: "Early Bird" },
+    { name: "Neon Knights", description: "Illuminating the streets with glow sticks and high-vis gear. Safety first, speed second.", image: "https://picsum.photos/seed/neon/400/300", category: "Night Running" },
+    { name: "Peak Performers", description: "Serious vertical gain for those who love a challenge. Mountain trails only.", image: "https://picsum.photos/seed/peak/400/300", category: "Trail" },
+    { name: "Track Titans", description: "Precision interval training on the oval. Hit your splits, find your limits.", image: "https://picsum.photos/seed/track/400/300", category: "Track" },
+    { name: "Brunch Runners", description: "We run so we can eat. 5k social run followed by the best pancakes in town.", image: "https://picsum.photos/seed/brunch/400/300", category: "Social" },
+    { name: "River Rapids", description: "Fast-paced runs along the winding river paths. Catch the breeze.", image: "https://picsum.photos/seed/river/400/300", category: "Scenic" },
+    { name: "Grit & Glory", description: "Mental toughness training for ultra-marathoners. Long miles, no complaints.", image: "https://picsum.photos/seed/grit/400/300", category: "Endurance" },
+    { name: "Alley Cats", description: "Navigation-based runs through the city's hidden shortcuts and urban jungles.", image: "https://picsum.photos/seed/alley/400/300", category: "Adventure" },
+    { name: "First Light Flyers", description: "Catch the very first rays of sun on the move. The city is yours.", image: "https://picsum.photos/seed/sunrise/400/300", category: "Early Bird" }
+  ];
+
+  const insertStmt = db.prepare('INSERT INTO communities (name, description, image, category) VALUES (?, ?, ?, ?)');
+  initialCommunities.forEach(c => insertStmt.run(c.name, c.description, c.image, c.category));
+}
 
 async function startServer() {
   const app = express();
@@ -420,6 +476,85 @@ async function startServer() {
     `).run(req.user.id, 'manual', type || 'Run', distance, duration, date || new Date().toISOString());
     
     res.json({ message: 'Activity imported' });
+  });
+
+  // --- Community Routes ---
+  app.get('/api/communities', (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    let userId = null;
+    if (token) {
+      try {
+        const decoded: any = jwt.verify(token, JWT_SECRET);
+        userId = (decoded as any).id;
+      } catch (e) {}
+    }
+
+    const communities = db.prepare(`
+      SELECT c.*, 
+      (SELECT COUNT(*) FROM community_members WHERE communityId = c.id) as members,
+      (SELECT 1 FROM community_members WHERE communityId = c.id AND userId = ?) as isJoined
+      FROM communities c
+      ORDER BY c.createdAt DESC
+    `).all(userId);
+    res.json(communities);
+  });
+
+  app.post('/api/communities', authenticateToken, (req: any, res) => {
+    const { name, description, category, image } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    
+    try {
+      const stmt = db.prepare('INSERT INTO communities (name, description, category, image, ownerId) VALUES (?, ?, ?, ?, ?)');
+      const result = stmt.run(name, description || '', category || 'Social', image || `https://picsum.photos/seed/${Date.now()}/400/300`, req.user.id);
+      
+      // Auto-join the creator
+      db.prepare('INSERT INTO community_members (communityId, userId) VALUES (?, ?)').run(result.lastInsertRowid, req.user.id);
+      
+      res.status(201).json({ id: result.lastInsertRowid });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/communities/:id/join', authenticateToken, (req: any, res) => {
+    try {
+      const existing = db.prepare('SELECT 1 FROM community_members WHERE communityId = ? AND userId = ?').get(req.params.id, req.user.id);
+      if (existing) {
+        db.prepare('DELETE FROM community_members WHERE communityId = ? AND userId = ?').run(req.params.id, req.user.id);
+        return res.json({ joined: false });
+      } else {
+        db.prepare('INSERT INTO community_members (communityId, userId) VALUES (?, ?)').run(req.params.id, req.user.id);
+        return res.json({ joined: true });
+      }
+    } catch (error: any) {
+      res.status(400).json({ error: 'Error joining community' });
+    }
+  });
+
+  app.get('/api/communities/:id/messages', (req, res) => {
+    const messages = db.prepare(`
+      SELECT m.*, u.name as sender 
+      FROM community_messages m
+      JOIN users u ON m.userId = u.id
+      WHERE m.communityId = ?
+      ORDER BY m.createdAt ASC
+      LIMIT 100
+    `).all(req.params.id);
+    res.json(messages);
+  });
+
+  app.post('/api/communities/:id/messages', authenticateToken, (req: any, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Text is required' });
+
+    try {
+      const stmt = db.prepare('INSERT INTO community_messages (communityId, userId, text) VALUES (?, ?, ?)');
+      const result = stmt.run(req.params.id, req.user.id, text);
+      res.status(201).json({ id: result.lastInsertRowid });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
   });
 
   // --- Vite Integration ---

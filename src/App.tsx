@@ -266,10 +266,10 @@ const RunnersShowcase = () => {
 
 interface Message {
   id: number;
+  userId: number;
   sender: string;
   text: string;
-  time: string;
-  isMe?: boolean;
+  createdAt: string;
 }
 
 interface Community {
@@ -279,13 +279,29 @@ interface Community {
   description: string;
   image: string;
   category: string;
-  messages: Message[];
+  isJoined?: boolean;
 }
 
 const ClubChat = ({ club, onClose }: { club: Community; onClose: () => void }) => {
-  const [messages, setMessages] = useState(club.messages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const { user } = useAuth();
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const fetchMessages = async () => {
+    try {
+      const res = await api.get(`/communities/${club.id}/messages`);
+      setMessages(res.data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000); // Poll for new messages
+    return () => clearInterval(interval);
+  }, [club.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -293,18 +309,17 @@ const ClubChat = ({ club, onClose }: { club: Community; onClose: () => void }) =
     }
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    const newMessage: Message = {
-      id: Date.now(),
-      sender: "Me",
-      text: input,
-      time: "Just now",
-      isMe: true
-    };
-    setMessages([...messages, newMessage]);
-    setInput("");
+    if (!input.trim() || !user) return;
+    
+    try {
+      await api.post(`/communities/${club.id}/messages`, { text: input });
+      setInput("");
+      fetchMessages();
+    } catch (e) {
+      alert("Failed to send message");
+    }
   };
 
   return (
@@ -321,7 +336,7 @@ const ClubChat = ({ club, onClose }: { club: Community; onClose: () => void }) =
             </div>
             <div>
               <h3 className="font-bold">{club.name}</h3>
-              <p className="text-xs text-zinc-400">{club.members} members online</p>
+              <p className="text-xs text-zinc-400">{club.members} members</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
@@ -330,18 +345,21 @@ const ClubChat = ({ club, onClose }: { club: Community; onClose: () => void }) =
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-50">
-          {messages.map((msg) => (
-            <div key={msg.id} className={cn("flex flex-col", msg.isMe ? "items-end" : "items-start")}>
-              <div className={cn(
-                "max-w-[80%] p-4 rounded-2xl text-sm shadow-sm",
-                msg.isMe ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white text-zinc-900 border border-zinc-100 rounded-tl-none"
-              )}>
-                {!msg.isMe && <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1">{msg.sender}</p>}
-                <p className="leading-relaxed">{msg.text}</p>
+          {messages.map((msg) => {
+            const isMe = user?.id === msg.userId || user?.name === msg.sender;
+            return (
+              <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+                <div className={cn(
+                  "max-w-[80%] p-4 rounded-2xl text-sm shadow-sm",
+                  isMe ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white text-zinc-900 border border-zinc-100 rounded-tl-none"
+                )}>
+                  {!isMe && <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 mb-1">{msg.sender}</p>}
+                  <p className="leading-relaxed">{msg.text}</p>
+                </div>
+                <span className="text-[10px] text-zinc-400 mt-1 px-1">{formatDate(msg.createdAt)}</span>
               </div>
-              <span className="text-[10px] text-zinc-400 mt-1 px-1">{msg.time}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <form onSubmit={handleSend} className="p-4 bg-white border-t border-zinc-100 flex gap-2">
@@ -362,282 +380,117 @@ const ClubChat = ({ club, onClose }: { club: Community; onClose: () => void }) =
 };
 
 const CommunitySection = () => {
-  const [joined, setJoined] = useState<number[]>([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
   const [activeChat, setActiveChat] = useState<Community | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  const communities: Community[] = [
-    {
-      id: 1,
-      name: "Midnight Striders",
-      members: 1240,
-      description: "For those who find their pace under the city lights. Night runs every Tuesday.",
-      image: "https://picsum.photos/seed/nightrun/400/300",
-      category: "Night Running",
-      messages: [
-        { id: 1, sender: "Carlos", text: "Who's up for the 10k tonight?", time: "10:30 PM" },
-        { id: 2, sender: "Sarah", text: "I'm in! Meeting at the usual spot?", time: "10:32 PM" },
-        { id: 3, sender: "Mike", text: "Anyone seen my neon vest? I think I left it at the park.", time: "10:35 PM" },
-        { id: 4, sender: "Carlos", text: "Yeah, I saw it near the bench. I'll bring it tonight.", time: "10:36 PM" },
-        { id: 5, sender: "Elena", text: "Don't forget water, it's still humid out there!", time: "10:40 PM" }
-      ]
-    },
-    {
-      id: 2,
-      name: "Mountain Goats",
-      members: 850,
-      description: "Trail running enthusiasts conquering the steepest peaks. Weekend excursions.",
-      image: "https://picsum.photos/seed/trail/400/300",
-      category: "Trail",
-      messages: [
-        { id: 1, sender: "Dave", text: "The peak was beautiful today! Check the photos.", time: "2:00 PM" },
-        { id: 2, sender: "Lisa", text: "Wow! How was the descent? Slippery?", time: "2:05 PM" },
-        { id: 3, sender: "Dave", text: "A bit, but the new shoes held up great.", time: "2:10 PM" },
-        { id: 4, sender: "Marcus", text: "Anyone doing the ridge run on Sunday?", time: "3:00 PM" }
-      ]
-    },
-    {
-      id: 3,
-      name: "Elite Sprinters",
-      members: 420,
-      description: "Focusing on speed, form, and explosive power. Track sessions daily.",
-      image: "https://picsum.photos/seed/sprint/400/300",
-      category: "Track",
-      messages: [
-        { id: 1, sender: "Coach", text: "Intervals at 5 PM. Don't be late.", time: "1:00 PM" },
-        { id: 2, sender: "Kevin", text: "My hamstrings are still tight from yesterday.", time: "1:15 PM" },
-        { id: 3, sender: "Coach", text: "Do the dynamic stretches I showed you. 20 mins extra.", time: "1:20 PM" },
-        { id: 4, sender: "Kevin", text: "Got it. See you there.", time: "1:25 PM" }
-      ]
-    },
-    {
-      id: 4,
-      name: "Morning Glory Club",
-      members: 2100,
-      description: "Start your day with a 5K and a coffee. Sunrise runs at the park.",
-      image: "https://picsum.photos/seed/morning/400/300",
-      category: "Social",
-      messages: [
-        { id: 1, sender: "Jenny", text: "Run at 5? The sunrise is going to be epic.", time: "Yesterday" },
-        { id: 2, sender: "Tom", text: "I'm setting my alarm now. Coffee after?", time: "Yesterday" },
-        { id: 3, sender: "Jenny", text: "Always! I found a new bakery near the finish line.", time: "Yesterday" },
-        { id: 4, sender: "Alice", text: "I'm bringing my dog tomorrow, he needs the exercise too!", time: "8:00 PM" }
-      ]
-    },
-    {
-      id: 5,
-      name: "Coastal Cruisers",
-      members: 1560,
-      description: "Breezy ocean-side runs for all levels. Perfect for recovery days.",
-      image: "https://picsum.photos/seed/beach/400/300",
-      category: "Scenic",
-      messages: [
-        { id: 1, sender: "Sam", text: "The tide is low, perfect for a beach run.", time: "4:00 PM" },
-        { id: 2, sender: "Mia", text: "I'll be there in 15. Anyone else?", time: "4:05 PM" }
-      ]
-    },
-    {
-      id: 6,
-      name: "Iron Lungs",
-      members: 680,
-      description: "High-altitude training for serious endurance athletes. Oxygen is optional.",
-      image: "https://picsum.photos/seed/mountain/400/300",
-      category: "Endurance",
-      messages: [
-        { id: 1, sender: "Viktor", text: "15 miles at 8000ft today. Feeling strong.", time: "6:00 PM" },
-        { id: 2, sender: "Anna", text: "You're a beast, Viktor. I'm struggling at 5000ft lol.", time: "6:10 PM" }
-      ]
-    },
-    {
-      id: 7,
-      name: "Urban Explorers",
-      members: 940,
-      description: "Discover hidden gems in the city through running. Every run is a new route.",
-      image: "https://picsum.photos/seed/city/400/300",
-      category: "Adventure",
-      messages: [
-        { id: 1, sender: "Leo", text: "Found a cool mural in the alley behind 5th st.", time: "11:00 AM" },
-        { id: 2, sender: "Sophie", text: "Send the location! Let's route tomorrow's run there.", time: "11:15 AM" }
-      ]
-    },
-    {
-      id: 8,
-      name: "The 5AM Crew",
-      members: 3200,
-      description: "The earliest birds in the city. Beat the traffic and the sun.",
-      image: "https://picsum.photos/seed/early/400/300",
-      category: "Early Bird",
-      messages: [
-        { id: 1, sender: "Boss", text: "Alarms set? No excuses.", time: "9:00 PM" },
-        { id: 2, sender: "Chris", text: "Ready. Coffee is prepped.", time: "9:05 PM" },
-        { id: 3, sender: "Boss", text: "That's what I like to hear. See you in the dark.", time: "9:10 PM" }
-      ]
-    },
-    {
-      id: 9,
-      name: "Neon Knights",
-      members: 1100,
-      description: "Illuminating the streets with glow sticks and high-vis gear. Safety first, speed second.",
-      image: "https://picsum.photos/seed/neon/400/300",
-      category: "Night Running",
-      messages: [
-        { id: 1, sender: "Borg", text: "Ready to glow tonight?", time: "7:00 PM" },
-        { id: 2, sender: "Jules", text: "Got my lights charged up!", time: "7:15 PM" }
-      ]
-    },
-    {
-      id: 10,
-      name: "Peak Performers",
-      members: 540,
-      description: "Serious vertical gain for those who love a challenge. Mountain trails only.",
-      image: "https://picsum.photos/seed/peak/400/300",
-      category: "Trail",
-      messages: [
-        { id: 1, sender: "Sky", text: "Who's hitting the ridge tomorrow?", time: "5:00 PM" },
-        { id: 2, sender: "Rocky", text: "Count me in for the 2000ft climb.", time: "5:30 PM" }
-      ]
-    },
-    {
-      id: 11,
-      name: "Track Titans",
-      members: 300,
-      description: "Precision interval training on the oval. Hit your splits, find your limits.",
-      image: "https://picsum.photos/seed/track/400/300",
-      category: "Track",
-      messages: [
-        { id: 1, sender: "Ace", text: "What's the interval set today?", time: "3:00 PM" },
-        { id: 2, sender: "Coach", text: "12x400m at goal pace. Rest 60s.", time: "3:05 PM" }
-      ]
-    },
-    {
-      id: 12,
-      name: "Brunch Runners",
-      members: 2800,
-      description: "We run so we can eat. 5k social run followed by the best pancakes in town.",
-      image: "https://picsum.photos/seed/brunch/400/300",
-      category: "Social",
-      messages: [
-        { id: 1, sender: "Honey", text: "Maple syrup is waiting!", time: "Sunday" },
-        { id: 2, sender: "Crispy", text: "Can we try the new place on 3rd?", time: "Sunday" }
-      ]
-    },
-    {
-      id: 13,
-      name: "River Rapids",
-      members: 1450,
-      description: "Fast-paced runs along the winding river paths. Catch the breeze.",
-      image: "https://picsum.photos/seed/river/400/300",
-      category: "Scenic",
-      messages: [
-        { id: 1, sender: "Flow", text: "Mist is beautiful on the water today.", time: "6:00 AM" },
-        { id: 2, sender: "Reed", text: "Saw a heron at mile 4!", time: "7:00 AM" }
-      ]
-    },
-    {
-      id: 14,
-      name: "Grit & Glory",
-      members: 720,
-      description: "Mental toughness training for ultra-marathoners. Long miles, no complaints.",
-      image: "https://picsum.photos/seed/grit/400/300",
-      category: "Endurance",
-      messages: [
-        { id: 1, sender: "Iron", text: "50-miler next weekend. Who's pacing?", time: "Monday" },
-        { id: 2, sender: "Will", text: "I'll do the last 15 with you.", time: "Tuesday" }
-      ]
-    },
-    {
-      id: 15,
-      name: "Alley Cats",
-      members: 980,
-      description: "Navigation-based runs through the city's hidden shortcuts and urban jungles.",
-      image: "https://picsum.photos/seed/alley/400/300",
-      category: "Adventure",
-      messages: [
-        { id: 1, sender: "Dash", text: "Tunnel route is open again.", time: "4:00 PM" },
-        { id: 2, sender: "Sneak", text: "Meet at the garage entrance.", time: "4:15 PM" }
-      ]
-    },
-    {
-      id: 16,
-      name: "First Light Flyers",
-      members: 1900,
-      description: "Catch the very first rays of sun on the move. The city is yours.",
-      image: "https://picsum.photos/seed/sunrise/400/300",
-      category: "Early Bird",
-      messages: [
-        { id: 1, sender: "Ray", text: "Pink sky this morning!", time: "5:45 AM" },
-        { id: 2, sender: "Dawn", text: "Perfect start to the week.", time: "6:00 AM" }
-      ]
+  const fetchCommunities = async () => {
+    try {
+      const res = await api.get('/communities');
+      setCommunities(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const toggleJoin = (id: number) => {
-    setJoined(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  useEffect(() => {
+    fetchCommunities();
+  }, []);
+
+  const toggleJoin = async (id: number) => {
+    if (!user) return navigate('/login');
+    try {
+      const res = await api.post(`/communities/${id}/join`);
+      setCommunities(prev => prev.map(c => 
+        c.id === id ? { ...c, isJoined: res.data.joined, members: res.data.joined ? c.members + 1 : c.members - 1 } : c
+      ));
+    } catch (err) {
+      alert("Failed to join community");
+    }
   };
 
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+    <section id="communities" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
       <AnimatePresence>
         {activeChat && <ClubChat club={activeChat} onClose={() => setActiveChat(null)} />}
       </AnimatePresence>
 
-      <div className="text-center mb-16">
-        <h2 className="text-4xl font-black text-zinc-900 tracking-tight mb-4">Join Your Tribe</h2>
-        <p className="text-zinc-500 text-lg max-w-2xl mx-auto">
-          Running is better together. Connect with local clubs and specialized groups to elevate your training.
-        </p>
+      <div className="flex flex-col md:flex-row items-end justify-between gap-6 mb-16">
+        <div className="text-left">
+          <h2 className="text-4xl font-black text-zinc-900 tracking-tight mb-4">Join Your Tribe</h2>
+          <p className="text-zinc-500 text-lg max-w-2xl">
+            Running is better together. Connect with local clubs and specialized groups to elevate your training.
+          </p>
+        </div>
+        <Link 
+          to="/communities/create"
+          className="bg-zinc-900 text-white px-6 py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-200"
+        >
+          <Plus className="w-5 h-5" /> Create Your Tribe
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        {communities.map((club) => (
-          <motion.div
-            key={club.id}
-            whileHover={{ y: -8 }}
-            className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden flex flex-col"
-          >
-            <div className="relative h-48 overflow-hidden">
-              <img src={club.image} alt={club.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              <div className="absolute top-4 left-4">
-                <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-zinc-900 text-xs font-bold rounded-full shadow-sm">
-                  {club.category}
-                </span>
-              </div>
-            </div>
-            <div className="p-6 flex-1 flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-xl text-zinc-900">{club.name}</h3>
-                <div className="flex items-center gap-1 text-zinc-400 text-sm">
-                  <Users className="w-4 h-4" />
-                  <span>{club.members + (joined.includes(club.id) ? 1 : 0)}</span>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {[1,2,3,4].map(i => <div key={i} className="h-64 bg-zinc-100 animate-pulse rounded-3xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          {communities.map((club) => (
+            <motion.div
+              key={club.id}
+              whileHover={{ y: -8 }}
+              className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden flex flex-col group hover:shadow-xl transition-all duration-300"
+            >
+              <div className="relative h-48 overflow-hidden">
+                <img src={club.image} alt={club.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                <div className="absolute top-4 left-4">
+                  <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-zinc-900 text-xs font-bold rounded-full shadow-sm">
+                    {club.category}
+                  </span>
                 </div>
               </div>
-              <p className="text-zinc-500 text-sm mb-6 flex-1">{club.description}</p>
-              
-              <div className="flex gap-2">
-                <button
-                  onClick={() => toggleJoin(club.id)}
-                  className={cn(
-                    "flex-1 py-3 rounded-xl font-bold transition-all",
-                    joined.includes(club.id)
-                      ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                      : "bg-zinc-900 text-white hover:bg-zinc-800"
-                  )}
-                >
-                  {joined.includes(club.id) ? "Joined" : "Join Club"}
-                </button>
-                {joined.includes(club.id) && (
+              <div className="p-6 flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-xl text-zinc-900 truncate">{club.name}</h3>
+                  <div className="flex items-center gap-1 text-zinc-400 text-sm font-medium">
+                    <Users className="w-4 h-4" />
+                    <span>{club.members}</span>
+                  </div>
+                </div>
+                <p className="text-zinc-500 text-sm mb-6 flex-1 line-clamp-2">{club.description}</p>
+                
+                <div className="flex gap-2">
                   <button
-                    onClick={() => setActiveChat(club)}
-                    className="p-3 bg-zinc-100 text-zinc-900 rounded-xl hover:bg-zinc-200 transition-all"
-                    title="Open Chat"
+                    onClick={() => toggleJoin(club.id)}
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-bold transition-all text-sm",
+                      club.isJoined
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                        : "bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg shadow-zinc-100"
+                    )}
                   >
-                    <Users className="w-5 h-5" />
+                    {club.isJoined ? "Joined" : "Join Club"}
                   </button>
-                )}
+                  {club.isJoined && (
+                    <button
+                      onClick={() => setActiveChat(club)}
+                      className="p-3 bg-zinc-100 text-zinc-900 rounded-xl hover:bg-zinc-200 transition-all"
+                      title="Open Chat"
+                    >
+                      <MessageCircle className="w-5 h-5 text-emerald-600" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };
