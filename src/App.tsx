@@ -78,6 +78,18 @@ interface PhotoComment {
   createdAt: string;
 }
 
+interface Shoe {
+  id: number;
+  userId: number;
+  brand: string;
+  model: string;
+  image: string;
+  color: string;
+  distance: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
 // --- Auth Context ---
 const AuthContext = createContext<{
   user: User | null;
