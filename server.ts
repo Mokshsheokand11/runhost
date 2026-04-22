@@ -148,6 +148,19 @@ db.exec(`
     FOREIGN KEY (communityId) REFERENCES communities(id),
     FOREIGN KEY (userId) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS shoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId INTEGER NOT NULL,
+    brand TEXT NOT NULL,
+    model TEXT NOT NULL,
+    image TEXT,
+    color TEXT,
+    distance FLOAT DEFAULT 0,
+    isActive INTEGER DEFAULT 0,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
 `);
 
 // Seed communities if empty
