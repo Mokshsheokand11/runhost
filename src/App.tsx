@@ -1440,6 +1440,207 @@ const CreateMarathon = () => {
   );
 };
 
+const ShoeCard = ({ shoe, onRefresh }: { shoe: Shoe; onRefresh: () => void }) => {
+  const lifespan = 800 * 1000; // 800km in meters
+  const percentage = Math.min((shoe.distance / lifespan) * 100, 100);
+  const isWornOut = percentage >= 90;
+
+  const toggleActive = async () => {
+    try {
+      await api.patch(`/shoes/${shoe.id}/active`);
+      onRefresh();
+    } catch (e) {
+      alert("Failed to update shoe");
+    }
+  };
+
+  const deleteShoe = async () => {
+    if (!confirm("Are you sure you want to remove this shoe?")) return;
+    try {
+      await api.delete(`/shoes/${shoe.id}`);
+      onRefresh();
+    } catch (e) {
+      alert("Failed to delete shoe");
+    }
+  };
+
+  return (
+    <motion.div 
+      layout
+      className={cn(
+        "relative p-6 rounded-3xl border transition-all",
+        shoe.isActive 
+          ? "bg-white border-emerald-500 shadow-xl shadow-emerald-50" 
+          : "bg-zinc-50 border-zinc-100 opacity-80 hover:opacity-100"
+      )}
+    >
+      {shoe.isActive && (
+        <div className="absolute -top-3 left-6 px-3 py-1 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">
+          Active Gear
+        </div>
+      )}
+      
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h4 className="font-black text-xl text-zinc-900">{shoe.brand}</h4>
+          <p className="text-zinc-500 font-medium text-sm">{shoe.model}</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={toggleActive}
+            disabled={shoe.isActive}
+            className={cn(
+              "p-2 rounded-xl transition-all",
+              shoe.isActive ? "bg-emerald-50 text-emerald-600" : "bg-white text-zinc-400 hover:text-emerald-600 border border-zinc-200"
+            )}
+          >
+            <Zap className={cn("w-4 h-4", shoe.isActive && "fill-current")} />
+          </button>
+          <button onClick={deleteShoe} className="p-2 bg-white text-zinc-400 hover:text-red-500 border border-zinc-200 rounded-xl transition-all">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex justify-between items-end">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Total Distance</p>
+            <p className="text-2xl font-black text-zinc-900">{(shoe.distance / 1000).toFixed(1)} <span className="text-sm font-normal text-zinc-400">km</span></p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Lifespan</p>
+            <p className={cn("font-bold", isWornOut ? "text-red-500" : "text-emerald-600")}>{percentage.toFixed(0)}%</p>
+          </div>
+        </div>
+
+        <div className="h-2 w-full bg-zinc-200 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${percentage}%` }}
+            className={cn(
+              "h-full rounded-full transition-all duration-1000",
+              isWornOut ? "bg-red-500" : "bg-emerald-500"
+            )}
+          />
+        </div>
+
+        {isWornOut && (
+          <p className="text-[10px] font-bold text-red-500 flex items-center gap-1">
+            <Sparkles className="w-3 h-3" /> Time for a new pair? This gear is elite but tired.
+          </p>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+const ShoeCloset = () => {
+  const [shoes, setShoes] = useState<Shoe[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [formData, setFormData] = useState({ brand: '', model: '', color: '' });
+  const [loading, setLoading] = useState(true);
+
+  const fetchShoes = async () => {
+    try {
+      const res = await api.get('/shoes');
+      setShoes(res.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchShoes();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/shoes', formData);
+      setFormData({ brand: '', model: '', color: '' });
+      setIsAdding(false);
+      fetchShoes();
+    } catch (e) {
+      alert("Failed to add gear");
+    }
+  };
+
+  return (
+    <section className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-50 rounded-lg">
+            <Sparkles className="w-5 h-5 text-emerald-600" />
+          </div>
+          <h3 className="text-2xl font-bold text-zinc-900 tracking-tight">The Shoe Closet</h3>
+        </div>
+        <button 
+          onClick={() => setIsAdding(!isAdding)}
+          className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-xl font-bold hover:bg-zinc-800 transition-all text-sm"
+        >
+          {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {isAdding ? 'Cancel' : 'Add Gear'}
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isAdding && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <form onSubmit={handleSubmit} className="bg-zinc-50 p-6 rounded-3xl border border-zinc-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <input 
+                placeholder="Brand (e.g. Nike)" required
+                className="px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+                value={formData.brand}
+                onChange={e => setFormData({...formData, brand: e.target.value})}
+              />
+              <input 
+                placeholder="Model (e.g. Pegasus 40)" required
+                className="px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+                value={formData.model}
+                onChange={e => setFormData({...formData, model: e.target.value})}
+              />
+              <div className="flex gap-2">
+                <input 
+                  placeholder="Color/Nick" 
+                  className="flex-1 px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  value={formData.color}
+                  onChange={e => setFormData({...formData, color: e.target.value})}
+                />
+                <button type="submit" className="bg-emerald-600 text-white px-6 rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-100">
+                  Save
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[1,2].map(i => <div key={i} className="h-48 bg-zinc-50 animate-pulse rounded-3xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {shoes.map(shoe => <ShoeCard key={shoe.id} shoe={shoe} onRefresh={fetchShoes} />)}
+          {shoes.length === 0 && !isAdding && (
+            <div className="md:col-span-2 py-12 text-center bg-zinc-50 rounded-[2rem] border-2 border-dashed border-zinc-200">
+               <p className="text-zinc-400 font-medium">Your closet is empty. Add your first pair of shoes to track their momentum!</p>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+};
+
 const ProfilePage = () => {
   const [profile, setProfile] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
@@ -1534,6 +1735,8 @@ const ProfilePage = () => {
               {profile.won.length === 0 && <p className="text-zinc-400 col-span-2 py-8 text-center bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">No wins yet. Keep running!</p>}
             </div>
           </section>
+
+          <ShoeCloset />
 
           <section>
             <div className="flex items-center justify-between mb-6">
