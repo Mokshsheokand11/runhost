@@ -456,6 +456,9 @@ async function startServer() {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(req.user.id, 'strava', mockActivity.externalId, mockActivity.type, mockActivity.distance, mockActivity.duration, mockActivity.startDate);
 
+      // Update active shoe distance
+      db.prepare('UPDATE shoes SET distance = distance + ? WHERE userId = ? AND isActive = 1').run(mockActivity.distance, req.user.id);
+
       db.prepare('UPDATE user_integrations SET lastSyncAt = CURRENT_TIMESTAMP WHERE userId = ? AND provider = ?').run(req.user.id, 'strava');
     }
 
@@ -475,6 +478,9 @@ async function startServer() {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(req.user.id, 'manual', type || 'Run', distance, duration, date || new Date().toISOString());
     
+    // Update active shoe distance
+    db.prepare('UPDATE shoes SET distance = distance + ? WHERE userId = ? AND isActive = 1').run(distance, req.user.id);
+
     res.json({ message: 'Activity imported' });
   });
 
@@ -555,6 +561,44 @@ async function startServer() {
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
+  });
+
+  // --- Shoe Routes ---
+  app.get('/api/shoes', authenticateToken, (req: any, res) => {
+    const shoes = db.prepare('SELECT * FROM shoes WHERE userId = ? ORDER BY createdAt DESC').all(req.user.id);
+    res.json(shoes);
+  });
+
+  app.post('/api/shoes', authenticateToken, (req: any, res) => {
+    const { brand, model, image, color } = req.body;
+    if (!brand || !model) return res.status(400).json({ error: 'Brand and model are required' });
+    
+    try {
+      const stmt = db.prepare('INSERT INTO shoes (userId, brand, model, image, color) VALUES (?, ?, ?, ?, ?)');
+      const result = stmt.run(req.user.id, brand, model, image || '', color || '');
+      res.status(201).json({ id: result.lastInsertRowid });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.patch('/api/shoes/:id/active', authenticateToken, (req: any, res) => {
+    try {
+      db.transaction(() => {
+        // Deactivate all shoes for this user
+        db.prepare('UPDATE shoes SET isActive = 0 WHERE userId = ?').run(req.user.id);
+        // Activate selected shoe
+        db.prepare('UPDATE shoes SET isActive = 1 WHERE id = ? AND userId = ?').run(req.params.id, req.user.id);
+      })();
+      res.json({ message: 'Shoe activated' });
+    } catch (error: any) {
+      res.status(400).json({ error: 'Error activating shoe' });
+    }
+  });
+
+  app.delete('/api/shoes/:id', authenticateToken, (req: any, res) => {
+    db.prepare('DELETE FROM shoes WHERE id = ? AND userId = ?').run(req.params.id, req.user.id);
+    res.json({ message: 'Shoe deleted' });
   });
 
   // --- Vite Integration ---
